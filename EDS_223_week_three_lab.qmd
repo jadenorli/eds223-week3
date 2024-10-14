@@ -1,0 +1,348 @@
+---
+title: "EDS_223_week_three_lab"
+format: html
+editor: visual
+---
+
+#Load Libraries
+
+```{r}
+library(tmap)
+library(tidyverse)
+library(sf)
+library(spData)
+```
+
+#Load in Data
+
+```{r}
+#load in the New Zealand data
+nz <- spData::nz
+nz_height <- spData::nz_height
+
+#filter to the Canterbury region
+canterbury <- nz %>%
+  dplyr::filter(Name == "Canterbury")
+```
+
+#Plot New Zealand Map
+
+```{r}
+#make a map of New Zealand with the 100 highest peaks and canterbury region
+tm_shape(nz) +
+  tm_polygons() +
+  tm_shape(canterbury) +
+  tm_fill(col = "darkgrey") +
+  tm_shape(nz_height) +
+  tm_dots(col = "red")
+```
+
+#Subsetting Spatial Data
+
+```{r}
+#subset the nz data to just the canterbury region
+##by default it will just subset for the regions that intersect
+c_height1 <- nz_height[canterbury,] #filter with just the first row for all the columns x[row,column] 
+
+
+##here is another way to subset using tidy notation
+c_height2 <- nz_height %>%
+  st_filter(y = canterbury, .predicate = st_intersects)
+
+##one more method (this returns an sgbp and is annoying to use)
+
+###empty rows do not intersect (they are nor in Canterbury)
+###rows with ones do intersect 
+nz_height_sgbp <- st_intersects (x = nz_height, y = canterbury)
+
+###this returns true false statements for the previous method 
+nz_height_logical <- lengths(nz_height_sgbp) > 0
+
+###creating a logical vector based on st_intersects()
+c_height3 <- nz_height[nz_height_logical, ]
+
+#here we are choosing the relationship
+##finding all of the highest points outside of canterbury 
+nz_height[canterbury, ,op = st_disjoint]
+
+
+#find points that are within a certian distance of each other
+nz_height_logical <- st_is_within_distance(nz_height, canterbury, 
+                      dist = units::set_units(1000, "km"),
+                      sparse = FALSE) #turns this directly into a logical and can be used in the sgbp method as well by using sparse = FALSE
+
+#subset the nz_height data to filter to all the points within 1000 km of Canterbury 
+c_height4 <- nz_height[nz_height_logical, ]
+
+
+```
+
+#Spatial Joins
+
+```{r}
+#by default st_join uses a left join st_join(x, y, join = st_intersects (default))
+st_join(nz_height, nz, join = st_intersects) %>% #need to define which joining method we want to use
+  select(id = t50_fid, elevation, region = Name) %>% #choosing which columns we want to join 
+  group_by(region) %>%
+  summarise(n_points = n()) %>% #returns the number of peaks in that region and the geometry reamains stikcy 
+  st_drop_geometry() #drops the geometry from the table 
+
+#this is the way to use an inner join by setting left = FALSE
+st_join(nz_height, nz, join = st_intersects, left = FALSE)
+```
+
+```{r}
+#load in the cycle hire data from spData
+cycle_hire <- spData::cycle_hire
+
+#load in the cycle data from open streets map
+cycle_hire_osm <- spData::cycle_hire_osm
+
+tmap_mode("view")
+
+#plot to show how the two datasets don't align completely 
+tm_shape(cycle_hire) +
+  tm_symbols(col = "red", alpha = 0.2) +
+  tm_shape(cycle_hire_osm) +
+  tm_symbols(col = "blue", alpha = 0.2)
+```
+
+#Distance Based Joins
+
+```{r}
+#join the datasets based on a distance of 20m
+cycle_hire_join <- st_join(cycle_hire, cycle_hire_osm,
+        st_is_within_distance,
+        dist = units::set_units(20, "m")) 
+
+#diagnose the outputs of the join to ensure that the the number of rows is the same
+##we see that there are multiple points within 20m of each other so R made duplicate rows of those points 
+if(nrow(cycle_hire) == nrow(cycle_hire_join)){
+  print("join matches original data dimensions")
+} else{
+  warning("join does not match original data dimensions")
+}
+
+
+```
+
+#Geometry Operations
+
+##Aggregating
+
+```{r}
+us_states <- spData::us_states
+
+#subset the data to the regions of the US
+##changes the geometries to have each region as a polygon 
+regions <- us_states %>%
+  group_by(REGION) %>%
+  summarise(population = sum(total_pop_15, na.rm = TRUE))
+
+tmap_mode("plot")
+
+tm_shape(us_states) +
+  tm_polygons()
+
+tm_shape(regions) +
+  tm_polygons()
+```
+
+```{r}
+#subset the data to just the states in the western region of the US
+us_west <- us_states[us_states$REGION == "West", ]
+
+tm_shape(us_west) +
+  tm_polygons()
+
+#create a union of those geometries of the western states
+us_west_union <- st_union(us_west)
+
+tm_shape(us_west_union) +
+  tm_polygons()
+
+#can also join up multiple polygons 
+texas <- us_states[us_states$NAME == "Texas",]
+
+texas_union <- st_union(us_west_union, texas)
+
+tm_shape(texas_union) +
+  tm_polygons()
+
+```
+
+##Buffering
+
+```{r}
+seine <- spData::seine
+
+#put a buffer around the seine of 50 km
+seine_buffer <- st_buffer(seine, dist = 50000)
+
+
+tm_shape(seine_buffer) +
+  tm_polygons() +
+  tm_shape(seine) +
+  tm_lines()
+
+#we can union the buffer to look at one polygon of the 50km radius from the Seine
+seine_union <- st_union(seine_buffer)
+
+
+tm_shape(seine_union) +
+  tm_polygons() +
+  tm_shape(seine) +
+  tm_lines()
+
+```
+
+```{r}
+#buffer out the points within a distance of 1000km
+nz_height_buffer <- st_buffer(nz_height, dist = 1000000)
+
+#same as doing st_filter with st_is_within_distance
+c_height5 <- nz_height_buffer %>%
+  st_filter(y = canterbury, .predicate = st_intersects)
+
+#check that they are the same
+if(nrow(c_height4) == nrow(c_height5)) {
+  print("results match")
+} else{
+  warning("results do NOT match")
+}
+
+```
+
+```{r}
+#create two circles that overlap
+x <- st_sfc(st_point(c(0,1))) %>%
+  st_buffer(., dist = 1) %>%
+  st_as_sf()
+
+y <- st_sfc(st_point(c(1,1))) %>%
+  st_buffer(., dist = 1) %>%
+  st_as_sf()
+
+#create a bbox that includes both of them
+bbox <- st_union(x, y)
+
+intersection <- st_intersection(x,y)
+
+#plot the two circles
+tm_shape(x, bbox = bbox) +
+  tm_borders(col = "red") +
+  tm_shape(y) +
+  tm_borders(col = "blue") +
+  tm_shape(intersection) +
+  tm_fill(col = "purple")
+
+
+difference_x_y <- st_difference(x,y)
+
+#plot the two circles
+tm_shape(x, bbox = bbox) +
+  tm_borders(col = "red") +
+  tm_shape(y) +
+  tm_borders(col = "blue") +
+  tm_shape(difference_x_y) +
+  tm_fill(col = "purple")
+
+difference_y_x <- st_difference(y,x)
+
+#plot the two circles
+tm_shape(x, bbox = bbox) +
+  tm_borders(col = "red") +
+  tm_shape(y) +
+  tm_borders(col = "blue") +
+  tm_shape(difference_y_x) +
+  tm_fill(col = "purple")
+
+
+sym_difference<- st_sym_difference(x,y)
+
+#plot the two circles
+tm_shape(x, bbox = bbox) +
+  tm_borders(col = "red") +
+  tm_shape(y) +
+  tm_borders(col = "blue") +
+  tm_shape(sym_difference) +
+  tm_fill(col = "purple")
+
+```
+
+```{r}
+bb <- bbox
+box <- st_as_sf(bb)
+
+#create random points on a surface
+p <- st_sample(x = box, size = 100) %>%
+  st_as_sf()
+
+#plot the two circles
+tm_shape(x, bbox = bbox) +
+  tm_borders(col = "red") +
+  tm_shape(y) +
+  tm_borders(col = "blue") +
+  tm_shape(p) +
+  tm_dots(col = "purple")
+
+#find where the points intersect both x and y
+##method one
+x_and_y <- st_intersection(x,y)
+
+p_xy1 <- p[x_and_y, ]
+
+#plot the two circles
+tm_shape(x, bbox = bbox) +
+  tm_borders(col = "red") +
+  tm_shape(y) +
+  tm_borders(col = "blue") +
+  tm_shape(p_xy1) +
+  tm_dots(col = "purple")
+
+
+##method two
+x_and_y <- st_intersection(x,y)
+
+p_xy2 <- p %>%
+  st_filter(., x_and_y)
+
+#plot the two circles
+tm_shape(x, bbox = bbox) +
+  tm_borders(col = "red") +
+  tm_shape(y) +
+  tm_borders(col = "blue") +
+  tm_shape(p_xy2) +
+  tm_dots(col = "purple")
+```
+
+##Centroids
+
+```{r}
+#create a centroid
+nz_centroid <- st_centroid(nz)
+
+#use a point on surface approach 
+nz_pos <- st_point_on_surface(nz)
+
+#show how the two different methods create different ways to visualize the polygons as points 
+tm_shape(nz) +
+  tm_polygons() +
+  tm_shape(nz_centroid) +
+  tm_symbols(col = "red", alpha = 0.5) +
+  tm_shape(nz_pos) +
+  tm_symbols(col = "blue", alpha = 0.5) 
+  
+```
+
+##Simplification
+
+```{r}
+#simplify the river using the DP approximation 
+seine_simple <- st_simplify(seine, dTolerance = 2000)
+
+tm_shape(seine) +
+  tm_lines(col = "red") +
+  tm_shape(seine_simple) +
+  tm_lines(col = "blue")
+```
