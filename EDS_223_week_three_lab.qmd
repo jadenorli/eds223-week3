@@ -18,6 +18,11 @@ library(spData)
 ```{r}
 #load in the New Zealand data
 nz <- spData::nz
+
+st_crs(nz)
+
+class(nz)
+
 nz_height <- spData::nz_height
 
 #filter to the Canterbury region
@@ -53,7 +58,7 @@ c_height2 <- nz_height %>%
 
 ###empty rows do not intersect (they are nor in Canterbury)
 ###rows with ones do intersect 
-nz_height_sgbp <- st_intersects (x = nz_height, y = canterbury)
+nz_height_sgbp <- st_intersect(x = nz_height, y = canterbury)
 
 ###this returns true false statements for the previous method 
 nz_height_logical <- lengths(nz_height_sgbp) > 0
@@ -71,6 +76,8 @@ nz_height_logical <- st_is_within_distance(nz_height, canterbury,
                       dist = units::set_units(1000, "km"),
                       sparse = FALSE) #turns this directly into a logical and can be used in the sgbp method as well by using sparse = FALSE
 
+nz_height_logical
+
 #subset the nz_height data to filter to all the points within 1000 km of Canterbury 
 c_height4 <- nz_height[nz_height_logical, ]
 
@@ -81,14 +88,18 @@ c_height4 <- nz_height[nz_height_logical, ]
 
 ```{r}
 #by default st_join uses a left join st_join(x, y, join = st_intersects (default))
-st_join(nz_height, nz, join = st_intersects) %>% #need to define which joining method we want to use
+left_join <- st_join(nz_height, nz, join = st_intersects) %>% #need to define which joining method we want to use
+  select(id = t50_fid, elevation, region = Name) 
+
+table <- st_join(nz_height, nz, join = st_intersects) %>% #need to define which joining method we want to use
   select(id = t50_fid, elevation, region = Name) %>% #choosing which columns we want to join 
   group_by(region) %>%
   summarise(n_points = n()) %>% #returns the number of peaks in that region and the geometry reamains stikcy 
   st_drop_geometry() #drops the geometry from the table 
 
 #this is the way to use an inner join by setting left = FALSE
-st_join(nz_height, nz, join = st_intersects, left = FALSE)
+inner_join <- st_join(nz_height, nz, join = st_intersects, left = FALSE)
+
 ```
 
 ```{r}
@@ -258,7 +269,7 @@ tm_shape(x, bbox = bbox) +
   tm_fill(col = "purple")
 
 
-sym_difference<- st_sym_difference(x,y)
+sym_difference <- st_sym_difference(x,y)
 
 #plot the two circles
 tm_shape(x, bbox = bbox) +
