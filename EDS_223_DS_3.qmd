@@ -4,4 +4,92 @@ format: html
 editor: visual
 ---
 
-## 
+# Load in Libraries
+```{r}
+library(here)
+library(tidyverse)
+library(sf)
+library(tmap)
+
+```
+
+```{r}
+#read in the dataframes
+sb_protected_areas <- read_sf(here::here("data", "cpad_super_units_sb.shp")) %>% 
+  st_transform("ESRI:102009")
+
+sb_city_boundaries <- read_sf(here::here("data", "sb_city_boundaries_2003.shp")) %>%
+  st_transform("ESRI:102009")
+
+sb_county_boundary <- read_sf(here::here("data", "sb_county_boundary_2020.shp")) %>%
+  st_transform("ESRI:102009")
+
+aves <- read_sf(here::here("data", "aves_observations_2020_2024.shp")) %>%
+  st_transform("ESRI:102009")
+
+```
+
+
+
+# Avian Species in Protected Areas of SB County
+```{r}
+#looking at the birds that are only found in the SB protected area
+aves_PA_subset <- sb_protected_areas[aves, ]
+
+nrow(aves_PA_subset)
+
+tm_shape(sb_protected_areas) +
+  tm_polygons() +
+  tm_shape(aves_PA_subset) +
+  tm_dots()
+
+#looking at all the bird species
+#join keeps at the original data but associates new attributes to it 
+aves_PA_join <- st_join(aves, sb_protected_areas)
+
+nrow(aves_PA_join)
+
+#my code but something is wrong...
+aves_protected <- st_join(aves, sb_protected_areas) 
+
+tm_shape(aves_protected) +
+  tm_dots(col = "red")
+
+nrow(aves_protected)
+
+```
+
+
+# Create a 5km Buffer
+```{r}
+st_crs(sb_protected_areas)$units
+
+PA_5km <- st_buffer(sb_protected_areas, dist = 5000)
+
+aves_PA_5km <- PA_5km[aves,]
+
+nrow(aves_PA_5km)
+
+```
+
+
+# Protected Areas within 15km of Goleta
+```{r}
+#subset to Goleta
+goleta <- sb_city_boundaries %>%
+  dplyr::filter(NAME == "Goleta") 
+
+#find points that are within a certian distance of each other
+goleta_aves_15_logical <- st_is_within_distance(aves, goleta, 
+                      dist = units::set_units(15, "km"),
+                      sparse = FALSE) #turns this directly into a logical and can be used in the sgbp method as well by using sparse = FALSE
+
+goleta_aves_15_logical
+
+#subset the nz_height data to filter to all the points within 1000 km of Canterbury 
+goleta_aves_15 <- aves[goleta_aves_15_logical, ]
+
+goleta_aves_15
+
+```
+
