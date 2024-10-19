@@ -1,0 +1,155 @@
+---
+title: "EDS_223_DS3_Answer_Key"
+format: html
+editor: visual
+---
+
+# Find Bird Observations within Santa Barbara’s PAs
+
+## Load Libraries
+```{r}
+library(here)
+library(tidyverse)
+library(sf)
+library(tmap)
+```
+
+
+## Read in Data
+```{r}
+# Read Santa Barbara PA vectors
+sb_protected_areas <- read_sf(here::here("data", "cpad_super_units_sb.shp")) %>% 
+  st_transform("ESRI:102009")
+
+# Read Santa Barbara's city boundaries vector
+sb_city_boundaries <- read_sf(here::here("data", "sb_city_boundaries_2003.shp")) %>%
+  st_transform("ESRI:102009")
+
+# Read Santa Barbara's county boundaries vector
+sb_county_boundary <- read_sf(here::here("data", "sb_county_boundary_2020.shp")) %>%
+  st_transform("ESRI:102009")
+
+# Read iNaturalist bird observations from 2020-2024
+aves <- read_sf(here::here("data", "aves_observations_2020_2024.shp")) %>%
+  st_transform("ESRI:102009")
+```
+
+
+# Spatial Subset:
+```{r}
+# Spatially subset the PA geometries to only those with bird observations
+aves_PA_subset <- sb_protected_areas[aves, ]
+
+tm_shape(sb_county_boundary) +
+  tm_fill() +
+  tm_shape(sb_protected_areas) +
+    tm_borders(lwd = 1, col = "#fb8500") +
+    tm_fill(col = "#fb8500", alpha = 0.2) +
+  tm_shape(aves_PA_subset) +
+    tm_dots(col = "#023047") +
+  tm_layout(main.title = "Birds in Santa Barbara\nCounty Protected Areas",
+            main.title.size = 1)
+
+#check the number of rows in the spatial subset
+nrow(aves_PA_subset)
+
+```
+
+# Spatial Join:
+```{r}
+# Append the Protected Area geometries to the bird observation geometries
+aves_PA_join <- st_join(aves, sb_protected_areas)
+
+tm_shape(sb_county_boundary) +
+  tm_fill() +
+  tm_shape(sb_protected_areas) +
+    tm_borders(lwd = 1, col = "#fb8500") +
+    tm_fill(col = "#fb8500", alpha = 0.2) +
+  tm_shape(aves_PA_join) +
+    tm_dots(col = "#023047") +
+  tm_layout(main.title = "Birds in Santa Barbara\nCounty Protected Areas",
+            main.title.size = 1)
+
+#check the number of rows in the spatial join
+nrow(aves_PA_join)
+
+```
+
+
+# 5km Buffer
+```{r}
+# Check if units are in meters
+st_crs(sb_protected_areas)$units
+
+# Create 5000m buffer around PAs
+PA_buffer_5km <- st_buffer(sb_protected_areas, dist = 5000)
+
+# Subset the buffered PA geoms to only those with bird observations
+aves_buffer_subset <- PA_buffer_5km[aves, ]
+
+tm_shape(sb_county_boundary) +
+  tm_fill() +
+  tm_shape(sb_protected_areas) +
+    tm_borders(lwd = 1, col = "#fb8500") +
+    tm_fill(col = "#fb8500", alpha = 0.2) +
+  tm_shape(aves_buffer_subset) +
+  tm_dots(col = "#023047") +
+  tm_layout(main.title = "Birds in Santa Barbara\nCounty Protected Areas",
+            main.title.size = 1)
+
+#check the number of rows in the buffer
+nrow(aves_buffer_subset)
+
+```
+
+# Find Protected Areas in 15km of Goleta
+```{r}
+# Subset SB county to Goleta
+goleta <- sb_city_boundaries %>%
+  dplyr::filter(NAME == "Goleta")
+
+# Create 15km buffer around Goleta
+st_crs(goleta)$units
+
+goleta_buffer_15km <- st_buffer(goleta, dist = 15000)
+
+# Explore the different outputs with different spatial operations
+goleta_PAs_within <- st_within(sb_protected_areas, goleta_buffer_15km)
+goleta_PAs_intersect <- st_intersects(sb_protected_areas, goleta_buffer_15km)
+goleta_PAs_intersection <- st_intersection(sb_protected_areas, goleta_buffer_15km)
+
+# Check class
+class(goleta_PAs_intersect) == class(goleta_PAs_intersection)
+
+# Compute distance-based join
+goleta_PAs_join <- st_join(sb_protected_areas, goleta, st_is_within_distance, dist = 15000)
+
+# Print the number of observations included in outputs
+nrow(goleta_PAs_intersection)
+
+#compare the number of rows from the spatial join 
+nrow(goleta_PAs_join)
+
+```
+
+# Distance from Dangermond to Goleta
+```{r}
+# Subset PA to Dangermond Preserve
+dangermond <- sb_protected_areas %>%
+  dplyr::filter(UNIT_NAME == "Jack and Laura Dangermond Preserve")
+
+# Compute the distance between geometries edges, output as a matrix
+danger_dist <- st_distance(goleta, dangermond)
+
+# Calculate the geometric center
+dangermond_centroid <- st_centroid(dangermond)
+goleta_centroid <- st_centroid(goleta)
+
+danger_dist_centroid <- st_distance(goleta_centroid, dangermond_centroid)
+
+# Check if the distance matrices are equal
+danger_dist == danger_dist_centroid
+
+```
+
+
