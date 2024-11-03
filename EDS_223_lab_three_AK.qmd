@@ -432,7 +432,7 @@ tmap_arrange(map1, map2, map3, map4, nrow = 2)
 
 ### ii) Filtering:
 
-#### 1) Buffers:
+#### 1) Buffers
 
 In the previous section, we saw that we can filter spatial objects based on their proximity using st_is_within_distance(). An alternative approach to finding items that are within a set distance would be to expand the geometry and then intersect with objects of interest. We can change the size of geometries by creating a “buffer” using st_buffer()
 
@@ -489,7 +489,7 @@ if(nrow(c_height4) == nrow(c_height5)){
 }
 ```
 
-#### 2) Clipping:
+#### 2) Clipping
 
 Beyond filtering observations based on their spatial proximity, in some cases we might want to filter (or remove) portions of geometries. Spatial clipping is a form of spatial subsetting that involves changes to the geometry columns of at least some of the affected features.
 
